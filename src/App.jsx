@@ -170,6 +170,38 @@ const CoverSection = ({ data, setData }) => {
   );
 };
 
+const DistrictMapWithFallback = () => {
+  const [showInteractive, setShowInteractive] = useState(false);
+
+  return (
+    <div className="bg-slate-50 border-2 border-slate-300 rounded p-6">
+      <div className="flex justify-between items-center mb-2">
+        <p className="text-sm text-slate-600 font-semibold">Proposed DIF District — Route 9 Corridor</p>
+        <button
+          onClick={() => setShowInteractive(!showInteractive)}
+          className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500"
+        >
+          {showInteractive ? 'Show Static Map' : 'Load Interactive Map'}
+        </button>
+      </div>
+      {showInteractive ? (
+        <DistrictMap />
+      ) : (
+        <>
+          <div className="bg-white border border-slate-300 rounded overflow-hidden">
+            <img
+              src="/district-map.png"
+              alt="Southborough DIF Area Discussion Draft #2 — Route 9 Corridor showing proposed district boundaries along Boston Road/Route 9, bordered by Framingham, Westborough, and Ashland"
+              className="w-full h-auto"
+            />
+          </div>
+          <p className="text-xs text-slate-500 mt-2">Discussion Draft #2 (2/15/26) — DIF area is within the 25% statutory limit (MGL Ch. 40Q §2). Southborough total area: 15.7 sq mi; 25% limit: 3.9 sq mi.</p>
+        </>
+      )}
+    </div>
+  );
+};
+
 const AboutDistrictSection = ({ data, setData }) => {
   const [edit, setEdit] = useState(false);
   return (
@@ -182,7 +214,7 @@ const AboutDistrictSection = ({ data, setData }) => {
         </button>
       </div>
 
-      <DistrictMap />
+      <DistrictMapWithFallback />
 
       {edit ? (
         <textarea
