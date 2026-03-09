@@ -1,7 +1,33 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, Component } from 'react';
 import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+
+// Error boundary to prevent map crashes from blanking the whole page
+class MapErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="bg-slate-50 border-2 border-slate-300 rounded p-6">
+          <p className="text-sm text-red-600 font-semibold mb-2">Map Component Error</p>
+          <div className="bg-white border border-red-300 rounded p-4">
+            <p className="text-sm text-slate-600 mb-4">The interactive map encountered an error. Showing static map instead.</p>
+            <img src="/district-map.png" alt="District Map - Route 9 Corridor" className="w-full h-auto rounded border border-slate-200" />
+            <p className="text-xs text-slate-500 mt-2">Discussion Draft #2 (2/15/26) — DIF area is within the 25% statutory limit (MGL Ch. 40Q §2).</p>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const ARCGIS_URL = 'https://services1.arcgis.com/hGdibHYSPO59RG1h/arcgis/rest/services/L3_TAXPAR_POLY_ASSESS_gdb/FeatureServer/0/query';
 
@@ -77,7 +103,7 @@ function FitBounds({ geojsonData }) {
   return null;
 }
 
-export default function DistrictMap({ selectedParcelIds, onParcelClick }) {
+function DistrictMapInner({ selectedParcelIds, onParcelClick }) {
   const [geojsonData, setGeojsonData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -262,5 +288,13 @@ export default function DistrictMap({ selectedParcelIds, onParcelClick }) {
       </div>
       <p className="text-xs text-slate-500 mt-2">Click any parcel for details. Data from MassGIS ArcGIS REST API (TOWN_ID=277). Boundaries are within the 25% statutory limit (MGL Ch. 40Q §2).</p>
     </div>
+  );
+}
+
+export default function DistrictMap(props) {
+  return (
+    <MapErrorBoundary>
+      <DistrictMapInner {...props} />
+    </MapErrorBoundary>
   );
 }
