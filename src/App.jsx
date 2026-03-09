@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { Menu, X, ChevronDown, ChevronRight, Edit2, Eye, Download, Save, FileText, Loader } from 'lucide-react';
 import { generateDIFProposalPDF } from './pdfExport';
-import DistrictMap from './DistrictMap';
+// DistrictMap is lazy-loaded only when user clicks "Load Interactive Map"
+const LazyDistrictMap = React.lazy(() => import('./DistrictMap'));
 
 // PARCEL DATA - Route 9 Southborough
 const ROUTE9_PARCELS = [
@@ -172,20 +173,32 @@ const CoverSection = ({ data, setData }) => {
 
 const DistrictMapWithFallback = () => {
   const [showInteractive, setShowInteractive] = useState(false);
+  const [mapError, setMapError] = useState(false);
 
   return (
     <div className="bg-slate-50 border-2 border-slate-300 rounded p-6">
       <div className="flex justify-between items-center mb-2">
         <p className="text-sm text-slate-600 font-semibold">Proposed DIF District — Route 9 Corridor</p>
-        <button
-          onClick={() => setShowInteractive(!showInteractive)}
-          className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500"
-        >
-          {showInteractive ? 'Show Static Map' : 'Load Interactive Map'}
-        </button>
+        {!mapError && (
+          <button
+            onClick={() => setShowInteractive(!showInteractive)}
+            className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500"
+          >
+            {showInteractive ? 'Show Static Map' : 'Load Interactive Map'}
+          </button>
+        )}
       </div>
-      {showInteractive ? (
-        <DistrictMap />
+      {showInteractive && !mapError ? (
+        <React.Suspense fallback={
+          <div className="h-96 bg-white border border-slate-300 rounded flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
+              <p className="text-slate-500 text-sm">Loading interactive map...</p>
+            </div>
+          </div>
+        }>
+          <LazyDistrictMap />
+        </React.Suspense>
       ) : (
         <>
           <div className="bg-white border border-slate-300 rounded overflow-hidden">
