@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Menu, X, ChevronDown, ChevronRight, Edit2, Eye, Download, Save } from 'lucide-react';
+import { Menu, X, ChevronDown, ChevronRight, Edit2, Eye, Download, Save, FileText, Loader } from 'lucide-react';
+import { generateDIFProposalPDF } from './pdfExport';
 
 // PARCEL DATA - Route 9 Southborough
 const ROUTE9_PARCELS = [
@@ -1164,6 +1165,21 @@ export default function SouthboroughDIFApp() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('address');
   const [selectedParcels, setSelectedParcels] = useState(ROUTE9_PARCELS);
+  const [pdfProgress, setPdfProgress] = useState(null);
+  const [pdfGenerating, setPdfGenerating] = useState(false);
+
+  const handleExportPDF = async () => {
+    setPdfGenerating(true);
+    try {
+      const pages = await generateDIFProposalPDF(data, selectedParcels, stats, projectCost, (msg) => setPdfProgress(msg));
+      setPdfProgress(null);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      setPdfProgress('Error generating PDF');
+      setTimeout(() => setPdfProgress(null), 3000);
+    }
+    setPdfGenerating(false);
+  };
 
   const filteredParcels = useMemo(() => {
     return ROUTE9_PARCELS.filter(p =>
@@ -1335,6 +1351,22 @@ The Southborough DIF follows the proven Massachusetts Chapter 40Q model successf
             </button>
           ))}
         </nav>
+        <div className="p-2 border-t border-slate-700">
+          <button
+            onClick={handleExportPDF}
+            disabled={pdfGenerating}
+            className={`w-full px-4 py-3 rounded font-semibold text-sm transition-all ${
+              pdfGenerating
+                ? 'bg-slate-600 text-slate-400 cursor-wait'
+                : 'bg-green-600 hover:bg-green-500 text-white'
+            }`}
+          >
+            <div className="flex items-center gap-3 justify-center">
+              {pdfGenerating ? <Loader size={18} className="animate-spin" /> : <FileText size={18} />}
+              {sidebarOpen && <span>{pdfProgress || 'Export PDF'}</span>}
+            </div>
+          </button>
+        </div>
       </div>
 
       {/* Main Content */}
