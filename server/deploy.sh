@@ -37,7 +37,7 @@ touch "$LOCK_FILE"
 echo "[$(date)] Deploying: $LOCAL -> $REMOTE"
 
 git pull origin main --quiet
-npm install --production --quiet
+npm install --quiet
 npm run build
 
 echo "[$(date)] Deploy complete"
