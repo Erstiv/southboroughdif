@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { Menu, X, ChevronDown, ChevronRight, Edit2, Eye, Download, Save, FileText, Loader } from 'lucide-react';
 import { generateDIFProposalPDF } from './pdfExport';
+import DistrictMap from './DistrictMap';
 
 // PARCEL DATA - Route 9 Southborough
 const ROUTE9_PARCELS = [
@@ -181,17 +182,7 @@ const AboutDistrictSection = ({ data, setData }) => {
         </button>
       </div>
 
-      <div className="bg-slate-50 border-2 border-slate-300 rounded p-6">
-        <p className="text-sm text-slate-600 font-semibold mb-2">Proposed DIF District — Route 9 Corridor</p>
-        <div className="bg-white border border-slate-300 rounded overflow-hidden">
-          <img
-            src="/district-map.png"
-            alt="Southborough DIF Area Discussion Draft #2 — Route 9 Corridor showing proposed district boundaries along Boston Road/Route 9, bordered by Framingham, Westborough, and Ashland"
-            className="w-full h-auto"
-          />
-        </div>
-        <p className="text-xs text-slate-500 mt-2">Discussion Draft #2 (2/15/26) — DIF area is within the 25% statutory limit (MGL Ch. 40Q §2). Southborough total area: 15.7 sq mi; 25% limit: 3.9 sq mi.</p>
-      </div>
+      <DistrictMap />
 
       {edit ? (
         <textarea
