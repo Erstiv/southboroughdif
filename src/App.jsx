@@ -181,14 +181,15 @@ const AboutDistrictSection = ({ data, setData }) => {
       </div>
 
       <div className="bg-slate-50 border-2 border-slate-300 rounded p-6">
-        <p className="text-sm text-slate-600 font-semibold mb-2">District Map Placeholder</p>
-        <div className="h-64 bg-white border border-slate-300 rounded flex items-center justify-center text-slate-500 text-center p-4">
-          <div>
-            <p className="font-semibold">District Map - Route 9 Corridor, Southborough, MA</p>
-            <p className="text-sm mt-2">Integration with ArcGIS Online recommended for interactive mapping</p>
-            <p className="text-xs text-slate-400 mt-4">Shows 64 parcels along Boston Road/Route 9 in Southborough</p>
-          </div>
+        <p className="text-sm text-slate-600 font-semibold mb-2">Proposed DIF District — Route 9 Corridor</p>
+        <div className="bg-white border border-slate-300 rounded overflow-hidden">
+          <img
+            src="/district-map.png"
+            alt="Southborough DIF Area Discussion Draft #2 — Route 9 Corridor showing proposed district boundaries along Boston Road/Route 9, bordered by Framingham, Westborough, and Ashland"
+            className="w-full h-auto"
+          />
         </div>
+        <p className="text-xs text-slate-500 mt-2">Discussion Draft #2 (2/15/26) — DIF area is within the 25% statutory limit (MGL Ch. 40Q §2). Southborough total area: 15.7 sq mi; 25% limit: 3.9 sq mi.</p>
       </div>
 
       {edit ? (
