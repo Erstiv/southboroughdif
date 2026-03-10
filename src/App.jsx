@@ -1,7 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { Menu, X, ChevronDown, ChevronRight, Edit2, Eye, Download, Save, FileText, Loader } from 'lucide-react';
 import { generateDIFProposalPDF } from './pdfExport';
+import BoundaryEditorSection from './BoundaryEditorSection';
+import PARCEL_CENTROIDS from './parcelData';
+import { getParcelsInBoundary } from './geometry';
 // DistrictMap is lazy-loaded only when user clicks "Load Interactive Map"
 const LazyDistrictMap = React.lazy(() => import('./DistrictMap'));
 
@@ -1356,6 +1359,48 @@ export default function SouthboroughDIFApp() {
   const [pdfProgress, setPdfProgress] = useState(null);
   const [pdfGenerating, setPdfGenerating] = useState(false);
 
+  // Boundary editor state — load saved boundary from localStorage
+  const [boundaryVertices, setBoundaryVertices] = useState(() => {
+    try {
+      const saved = localStorage.getItem('southborough-dif-boundary');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed.vertices) && parsed.vertices.length >= 3) {
+          return parsed.vertices;
+        }
+      }
+    } catch (e) { /* ignore parse errors */ }
+    return null; // null = use default boundary in BoundaryEditorSection
+  });
+
+  // When boundary is saved from editor, persist to localStorage and update selected parcels
+  const handleSaveBoundary = useCallback((vertices, parcelsInside) => {
+    setBoundaryVertices(vertices);
+    localStorage.setItem('southborough-dif-boundary', JSON.stringify({
+      vertices,
+      savedAt: new Date().toISOString()
+    }));
+    // Update selectedParcels to match parcels inside the new boundary
+    // Map centroid parcels back to ROUTE9_PARCELS by id
+    const insideIds = new Set(parcelsInside.map(p => p.id));
+    const matched = ROUTE9_PARCELS.filter(p => insideIds.has(p.id));
+    if (matched.length > 0) {
+      setSelectedParcels(matched);
+    }
+  }, []);
+
+  // On mount, if we have a saved boundary, compute which parcels are inside
+  useEffect(() => {
+    if (boundaryVertices && boundaryVertices.length >= 3) {
+      const inside = getParcelsInBoundary(PARCEL_CENTROIDS, boundaryVertices);
+      const insideIds = new Set(inside.map(p => p.id));
+      const matched = ROUTE9_PARCELS.filter(p => insideIds.has(p.id));
+      if (matched.length > 0) {
+        setSelectedParcels(matched);
+      }
+    }
+  }, []); // only on mount
+
   const handleExportPDF = async () => {
     setPdfGenerating(true);
     try {
@@ -1502,6 +1547,7 @@ The Southborough DIF follows the proven Massachusetts Chapter 40Q model successf
   const sections = [
     {id: 'cover', label: 'Cover & Introduction', icon: '📄'},
     {id: 'district', label: 'About the District', icon: '🗺️'},
+    {id: 'boundary', label: 'Boundary Editor', icon: '✏️'},
     {id: 'parcels', label: 'Parcel Information', icon: '📋'},
     {id: 'findings', label: 'Findings', icon: '✓'},
     {id: 'program', label: 'Development Program', icon: '🏗️'},
@@ -1562,6 +1608,13 @@ The Southborough DIF follows the proven Massachusetts Chapter 40Q model successf
         <div className="p-8 max-w-6xl mx-auto space-y-8">
           {activeSection === 'cover' && <CoverSection data={data} setData={setData} />}
           {activeSection === 'district' && <AboutDistrictSection data={data} setData={setData} />}
+          {activeSection === 'boundary' && (
+            <BoundaryEditorSection
+              allParcels={PARCEL_CENTROIDS}
+              boundaryVertices={boundaryVertices}
+              onSaveBoundary={handleSaveBoundary}
+            />
+          )}
           {activeSection === 'parcels' && (
             <ParcelSection
               selectedParcels={selectedParcels}
