@@ -370,7 +370,7 @@ const DistrictMapWithFallback = () => {
   );
 };
 
-const AboutDistrictSection = ({ data, setData }) => {
+const AboutDistrictSection = ({ data, setData, stats }) => {
   const [edit, setEdit] = useState(false);
   return (
     <div className="bg-white p-8 rounded-lg shadow-sm border border-slate-200 space-y-6">
@@ -381,6 +381,25 @@ const AboutDistrictSection = ({ data, setData }) => {
           {edit ? 'View' : 'Edit'}
         </button>
       </div>
+
+      {/* District stats summary */}
+      {stats && (
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-blue-50 p-4 rounded border border-blue-200">
+            <p className="text-sm text-blue-700 font-semibold">Total Parcels</p>
+            <p className="text-3xl font-bold text-blue-900">{stats.count}</p>
+          </div>
+          <div className="bg-green-50 p-4 rounded border border-green-200">
+            <p className="text-sm text-green-700 font-semibold">Total Assessed Value</p>
+            <p className="text-2xl font-bold text-green-900">{formatCurrency(stats.totalVal)}</p>
+          </div>
+          <div className="bg-purple-50 p-4 rounded border border-purple-200">
+            <p className="text-sm text-purple-700 font-semibold">Total Acreage</p>
+            <p className="text-3xl font-bold text-purple-900">{stats.totalAcres.toFixed(1)}</p>
+            <p className="text-xs text-purple-600">{((stats.totalAcres / 14432) * 100).toFixed(2)}% of town</p>
+          </div>
+        </div>
+      )}
 
       <DistrictMapWithFallback />
 
@@ -619,7 +638,7 @@ const FindingsSection = ({ data, setData, stats }) => {
             className="mt-1"
           />
           <span className="text-sm text-slate-700">
-            <span className="font-semibold">Finding 1:</span> The district is appropriately defined and bounded as the Route 9 Corridor in Southborough, encompassing 64 parcels with total assessed value of {formatCurrency(stats.totalVal)}.
+            <span className="font-semibold">Finding 1:</span> The district is appropriately defined and bounded as the Route 9 Corridor in Southborough, encompassing {stats.count} parcels with total assessed value of {formatCurrency(stats.totalVal)}.
           </span>
         </label>
 
@@ -1359,47 +1378,58 @@ export default function SouthboroughDIFApp() {
   const [pdfProgress, setPdfProgress] = useState(null);
   const [pdfGenerating, setPdfGenerating] = useState(false);
 
-  // Boundary editor state — load saved boundary from localStorage
-  const [boundaryVertices, setBoundaryVertices] = useState(() => {
-    try {
-      const saved = localStorage.getItem('southborough-dif-boundary');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed.vertices) && parsed.vertices.length >= 3) {
-          return parsed.vertices;
+  // Boundary editor state
+  const [boundaryVertices, setBoundaryVertices] = useState(null);
+
+  // Load boundary from server first, fall back to localStorage
+  useEffect(() => {
+    const loadBoundary = async () => {
+      let verts = null;
+
+      // Try server first
+      try {
+        const res = await fetch('/api/boundary');
+        const data = await res.json();
+        if (data.vertices && data.vertices.length >= 3) {
+          verts = data.vertices;
+        }
+      } catch (e) { /* server not available */ }
+
+      // Fall back to localStorage
+      if (!verts) {
+        try {
+          const saved = localStorage.getItem('southborough-dif-boundary');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed.vertices) && parsed.vertices.length >= 3) {
+              verts = parsed.vertices;
+            }
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      if (verts) {
+        setBoundaryVertices(verts);
+        const inside = getParcelsInBoundary(PARCEL_CENTROIDS, verts);
+        const insideIds = new Set(inside.map(p => p.id));
+        const matched = ROUTE9_PARCELS.filter(p => insideIds.has(p.id));
+        if (matched.length > 0) {
+          setSelectedParcels(matched);
         }
       }
-    } catch (e) { /* ignore parse errors */ }
-    return null; // null = use default boundary in BoundaryEditorSection
-  });
+    };
+    loadBoundary();
+  }, []);
 
-  // When boundary is saved from editor, persist to localStorage and update selected parcels
+  // When boundary is saved from editor, update selected parcels
   const handleSaveBoundary = useCallback((vertices, parcelsInside) => {
     setBoundaryVertices(vertices);
-    localStorage.setItem('southborough-dif-boundary', JSON.stringify({
-      vertices,
-      savedAt: new Date().toISOString()
-    }));
-    // Update selectedParcels to match parcels inside the new boundary
-    // Map centroid parcels back to ROUTE9_PARCELS by id
     const insideIds = new Set(parcelsInside.map(p => p.id));
     const matched = ROUTE9_PARCELS.filter(p => insideIds.has(p.id));
     if (matched.length > 0) {
       setSelectedParcels(matched);
     }
   }, []);
-
-  // On mount, if we have a saved boundary, compute which parcels are inside
-  useEffect(() => {
-    if (boundaryVertices && boundaryVertices.length >= 3) {
-      const inside = getParcelsInBoundary(PARCEL_CENTROIDS, boundaryVertices);
-      const insideIds = new Set(inside.map(p => p.id));
-      const matched = ROUTE9_PARCELS.filter(p => insideIds.has(p.id));
-      if (matched.length > 0) {
-        setSelectedParcels(matched);
-      }
-    }
-  }, []); // only on mount
 
   const handleExportPDF = async () => {
     setPdfGenerating(true);
@@ -1434,7 +1464,7 @@ export default function SouthboroughDIFApp() {
     introduction: `This District Improvement Financing (DIF) Program under Massachusetts General Law Chapter 40Q establishes a designated development district, invested revenue district, development program, and infrastructure revenue district debt payoff (IRDDP) for the Route 9 Corridor in Southborough. The DIF mechanism allows the town to capture and invest new tax revenue generated by private development within the defined district to fund essential public infrastructure—specifically a modern municipal wastewater system that will enable higher-density, mixed-use development along this key regional economic corridor.
 
 The wastewater infrastructure will provide significant public health, environmental, and economic benefits including relief from outdated septic systems, protection of groundwater resources, and catalyzation of private investment and job creation aligned with state housing and economic development goals.`,
-    districtNarrative: `The Route 9 Corridor in Southborough is a key segment of the Route 9 "Golden Triangle" regional economic development zone between Boston and Worcester. The corridor extends approximately 2.5 miles along Boston Road and Route 9, encompassing 64 parcels with a combined assessed value of over $47 million.
+    districtNarrative: `The Route 9 Corridor in Southborough is a key segment of the Route 9 "Golden Triangle" regional economic development zone between Boston and Worcester. The corridor extends approximately 2.5 miles along Boston Road and Route 9.
 
 Currently, much of the corridor development is constrained by lack of municipal wastewater infrastructure, forcing reliance on individual septic systems. This limitation restricts development potential, threatens groundwater quality, and prevents the type of concentrated, mixed-use development that would maximize value capture and regional economic impact.
 
@@ -1607,7 +1637,7 @@ The Southborough DIF follows the proven Massachusetts Chapter 40Q model successf
       <div className="flex-1 overflow-y-auto">
         <div className="p-8 max-w-6xl mx-auto space-y-8">
           {activeSection === 'cover' && <CoverSection data={data} setData={setData} />}
-          {activeSection === 'district' && <AboutDistrictSection data={data} setData={setData} />}
+          {activeSection === 'district' && <AboutDistrictSection data={data} setData={setData} stats={stats} />}
           {activeSection === 'boundary' && (
             <BoundaryEditorSection
               allParcels={PARCEL_CENTROIDS}
