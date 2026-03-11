@@ -21,7 +21,7 @@ const TOUCH_THRESHOLD = 200; // feet
 
 const USE_CODE_COLORS = { '1': '#3b82f6', '3': '#f59e0b', '4': '#8b5cf6', '9': '#10b981', '8': '#10b981' };
 
-export default function BoundaryEditorSection({ allParcels, boundaryVertices, onSaveBoundary }) {
+export default function BoundaryEditorSection({ allParcels, boundaryVertices, onSaveBoundary, authToken, currentUser }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const polygonRef = useRef(null);
@@ -58,7 +58,7 @@ export default function BoundaryEditorSection({ allParcels, boundaryVertices, on
   const [searchTerm, setSearchTerm] = useState('');
   const [showOverlay, setShowOverlay] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [userName, setUserName] = useState(() => localStorage.getItem('dif-username') || '');
+  const userName = currentUser?.displayName || 'Unknown';
   const [lockInfo, setLockInfo] = useState(null);
   const [isLocked, setIsLocked] = useState(false);
   const [serverStatus, setServerStatus] = useState('');
@@ -83,16 +83,7 @@ export default function BoundaryEditorSection({ allParcels, boundaryVertices, on
       .catch(() => { /* server API not available, use local boundary */ });
   }, []);
 
-  // Prompt for username if not set
-  useEffect(() => {
-    if (!userName) {
-      const name = window.prompt('Enter your name (for boundary edit tracking):');
-      if (name) {
-        setUserName(name);
-        localStorage.setItem('dif-username', name);
-      }
-    }
-  }, [userName]);
+  const authHeaders = { 'Content-Type': 'application/json', ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {}) };
 
   const computeInsideParcels = useCallback((verts) => {
     if (!allParcels || !verts || verts.length < 3) return [];
@@ -333,8 +324,8 @@ export default function BoundaryEditorSection({ allParcels, boundaryVertices, on
     try {
       const res = await fetch('/api/boundary/lock', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action, lockedBy: userName })
+        headers: authHeaders,
+        body: JSON.stringify({ action })
       });
       const data = await res.json();
       if (res.ok) {
@@ -360,10 +351,9 @@ export default function BoundaryEditorSection({ allParcels, boundaryVertices, on
     try {
       const res = await fetch('/api/boundary', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
           vertices: verts,
-          savedBy: userName,
           parcelsInsideCount: insideParcels.length
         })
       });

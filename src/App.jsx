@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { Menu, X, ChevronDown, ChevronRight, Edit2, Eye, Download, Save, FileText, Loader } from 'lucide-react';
+import { Menu, X, ChevronDown, ChevronRight, Edit2, Eye, Download, Save, FileText, Loader, LogOut } from 'lucide-react';
 import { generateDIFProposalPDF } from './pdfExport';
 import BoundaryEditorSection from './BoundaryEditorSection';
+import LoginScreen from './LoginScreen';
+import AdminSection from './AdminSection';
 import PARCEL_CENTROIDS from './parcelData';
 import { getParcelsInBoundary } from './geometry';
 import L from 'leaflet';
@@ -1411,6 +1413,71 @@ const JustificationSection = ({ data, setData }) => {
 
 // Main Component
 export default function SouthboroughDIFApp() {
+  // --- Auth state ---
+  const [authToken, setAuthToken] = useState(() => localStorage.getItem('dif-token') || null);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('dif-user')); } catch { return null; }
+  });
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // Verify saved token on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (authToken) {
+        try {
+          const res = await fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setCurrentUser(data.user);
+          } else {
+            // Token expired or invalid
+            setAuthToken(null);
+            setCurrentUser(null);
+            localStorage.removeItem('dif-token');
+            localStorage.removeItem('dif-user');
+          }
+        } catch {
+          // Server unreachable — keep local auth state (offline mode)
+        }
+      }
+      setAuthChecked(true);
+    };
+    checkAuth();
+  }, []);
+
+  const handleLogin = (token, user) => {
+    setAuthToken(token);
+    setCurrentUser(user);
+  };
+
+  const handleLogout = () => {
+    if (authToken) {
+      fetch('/api/auth/logout', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      }).catch(() => {});
+    }
+    setAuthToken(null);
+    setCurrentUser(null);
+    localStorage.removeItem('dif-token');
+    localStorage.removeItem('dif-user');
+  };
+
+  // Show login screen if not authenticated
+  if (!authChecked) {
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a', color: 'white' }}>Loading...</div>;
+  }
+  if (!authToken || !currentUser) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
+  // --- App state (only rendered when logged in) ---
+  return <AuthenticatedApp currentUser={currentUser} authToken={authToken} onLogout={handleLogout} />;
+}
+
+function AuthenticatedApp({ currentUser, authToken, onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeSection, setActiveSection] = useState('cover');
   const [searchTerm, setSearchTerm] = useState('');
@@ -1422,12 +1489,10 @@ export default function SouthboroughDIFApp() {
   // Boundary editor state
   const [boundaryVertices, setBoundaryVertices] = useState(null);
 
-  // Load boundary from server first, fall back to localStorage
+  // Load boundary from server
   useEffect(() => {
     const loadBoundary = async () => {
       let verts = null;
-
-      // Try server first
       try {
         const res = await fetch('/api/boundary');
         const data = await res.json();
@@ -1435,19 +1500,6 @@ export default function SouthboroughDIFApp() {
           verts = data.vertices;
         }
       } catch (e) { /* server not available */ }
-
-      // Fall back to localStorage
-      if (!verts) {
-        try {
-          const saved = localStorage.getItem('southborough-dif-boundary');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            if (Array.isArray(parsed.vertices) && parsed.vertices.length >= 3) {
-              verts = parsed.vertices;
-            }
-          }
-        } catch (e) { /* ignore */ }
-      }
 
       if (verts) {
         setBoundaryVertices(verts);
@@ -1625,7 +1677,8 @@ The Southborough DIF follows the proven Massachusetts Chapter 40Q model successf
     {id: 'financial', label: 'Financial Plan', icon: '💰'},
     {id: 'operation', label: 'Operation & Management', icon: '⚙️'},
     {id: 'appendices', label: 'Appendices Checklist', icon: '📎'},
-    {id: 'justification', label: 'Justification', icon: '📝'}
+    {id: 'justification', label: 'Justification', icon: '📝'},
+    ...(currentUser.role === 'admin' ? [{id: 'admin', label: 'Administration', icon: '🔧'}] : [])
   ];
 
   return (
@@ -1656,7 +1709,7 @@ The Southborough DIF follows the proven Massachusetts Chapter 40Q model successf
             </button>
           ))}
         </nav>
-        <div className="p-2 border-t border-slate-700">
+        <div className="p-2 border-t border-slate-700 space-y-2">
           <button
             onClick={handleExportPDF}
             disabled={pdfGenerating}
@@ -1671,6 +1724,23 @@ The Southborough DIF follows the proven Massachusetts Chapter 40Q model successf
               {sidebarOpen && <span>{pdfProgress || 'Export PDF'}</span>}
             </div>
           </button>
+          {/* User info + logout */}
+          <div className="flex items-center gap-2 px-2 py-2">
+            <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold flex-shrink-0">
+              {currentUser.displayName?.charAt(0).toUpperCase() || '?'}
+            </div>
+            {sidebarOpen && (
+              <>
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-semibold truncate">{currentUser.displayName}</div>
+                  <div className="text-xs text-slate-400 truncate">{currentUser.role}</div>
+                </div>
+                <button onClick={onLogout} className="p-1.5 hover:bg-slate-700 rounded" title="Sign out">
+                  <LogOut size={14} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1684,6 +1754,8 @@ The Southborough DIF follows the proven Massachusetts Chapter 40Q model successf
               allParcels={PARCEL_CENTROIDS}
               boundaryVertices={boundaryVertices}
               onSaveBoundary={handleSaveBoundary}
+              authToken={authToken}
+              currentUser={currentUser}
             />
           )}
           {activeSection === 'parcels' && (
@@ -1703,6 +1775,7 @@ The Southborough DIF follows the proven Massachusetts Chapter 40Q model successf
           {activeSection === 'operation' && <OperationSection data={data} setData={setData} />}
           {activeSection === 'appendices' && <AppendicesSection data={data} setData={setData} />}
           {activeSection === 'justification' && <JustificationSection data={data} setData={setData} />}
+          {activeSection === 'admin' && currentUser.role === 'admin' && <AdminSection token={authToken} />}
         </div>
       </div>
     </div>
