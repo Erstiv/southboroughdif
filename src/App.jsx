@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { Menu, X, ChevronDown, ChevronRight, Edit2, Eye, Download, Save, FileText, Loader } from 'lucide-react';
 import { generateDIFProposalPDF } from './pdfExport';
 import BoundaryEditorSection from './BoundaryEditorSection';
 import PARCEL_CENTROIDS from './parcelData';
 import { getParcelsInBoundary } from './geometry';
-// DistrictMap is lazy-loaded only when user clicks "Load Interactive Map"
-const LazyDistrictMap = React.lazy(() => import('./DistrictMap'));
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 // PARCEL DATA - Route 9 Southborough
 const ROUTE9_PARCELS = [
@@ -326,52 +326,93 @@ const CoverSection = ({ data, setData }) => {
   );
 };
 
-const DistrictMapWithFallback = () => {
-  const [showInteractive, setShowInteractive] = useState(false);
-  const [mapError, setMapError] = useState(false);
+const DistrictBoundaryMap = ({ boundaryVertices, parcels }) => {
+  const mapContainerRef = useRef(null);
+  const mapObjRef = useRef(null);
+
+  useEffect(() => {
+    if (mapObjRef.current || !mapContainerRef.current) return;
+
+    const map = L.map(mapContainerRef.current, { zoomControl: true, scrollWheelZoom: false })
+      .setView([42.304, -71.516], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OSM', maxZoom: 19
+    }).addTo(map);
+
+    mapObjRef.current = map;
+
+    // Give the container a moment to size itself, then invalidate
+    setTimeout(() => map.invalidateSize(), 200);
+
+    return () => { map.remove(); mapObjRef.current = null; };
+  }, []);
+
+  // Draw boundary + parcels when data changes
+  useEffect(() => {
+    const map = mapObjRef.current;
+    if (!map) return;
+
+    // Clear previous layers (except tile layer)
+    map.eachLayer(layer => {
+      if (!(layer instanceof L.TileLayer)) map.removeLayer(layer);
+    });
+
+    // Draw boundary polygon
+    if (boundaryVertices && boundaryVertices.length >= 3) {
+      const latLngs = boundaryVertices.map(v => [v[1], v[0]]);
+      // Close polygon if needed
+      if (latLngs.length > 0 && (latLngs[0][0] !== latLngs[latLngs.length-1][0] || latLngs[0][1] !== latLngs[latLngs.length-1][1])) {
+        latLngs.push(latLngs[0]);
+      }
+      const poly = L.polygon(latLngs, {
+        color: '#991b1b', weight: 2.5, fillColor: '#991b1b',
+        fillOpacity: 0.08, dashArray: '6, 3'
+      }).addTo(map);
+      map.fitBounds(poly.getBounds(), { padding: [30, 30] });
+    }
+
+    // Draw parcels if we have them
+    if (parcels && parcels.length > 0) {
+      const USE_CODE_COLORS = { '1': '#3b82f6', '3': '#f59e0b', '4': '#8b5cf6', '9': '#10b981', '8': '#10b981' };
+      parcels.forEach(p => {
+        const lon = p.centroid_lon || 0, lat = p.centroid_lat || 0;
+        if (!lat || !lon) return;
+        const code = (p.use_code || p.useCode || '')[0];
+        const color = USE_CODE_COLORS[code] || '#6b7280';
+        const val = p.total_val || p.totalVal || 0;
+        const valStr = val >= 1e6 ? '$' + (val / 1e6).toFixed(1) + 'M' : '$' + Math.round(val / 1e3) + 'K';
+        L.circleMarker([lat, lon], {
+          radius: 4, fillColor: color, color: '#fff',
+          weight: 1, fillOpacity: 0.8
+        }).bindPopup(`<b>${p.address || p.addr}</b><br>${p.owner}<br>${valStr}`)
+          .addTo(map);
+      });
+    }
+  }, [boundaryVertices, parcels]);
 
   return (
-    <div className="bg-slate-50 border-2 border-slate-300 rounded p-6">
-      <div className="flex justify-between items-center mb-2">
-        <p className="text-sm text-slate-600 font-semibold">Proposed DIF District — Route 9 Corridor</p>
-        {!mapError && (
-          <button
-            onClick={() => setShowInteractive(!showInteractive)}
-            className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-500"
-          >
-            {showInteractive ? 'Show Static Map' : 'Load Interactive Map'}
-          </button>
-        )}
-      </div>
-      {showInteractive && !mapError ? (
-        <React.Suspense fallback={
-          <div className="h-96 bg-white border border-slate-300 rounded flex items-center justify-center">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
-              <p className="text-slate-500 text-sm">Loading interactive map...</p>
-            </div>
-          </div>
-        }>
-          <LazyDistrictMap />
-        </React.Suspense>
-      ) : (
-        <>
-          <div className="bg-white border border-slate-300 rounded overflow-hidden">
-            <img
-              src="/district-map.png"
-              alt="Southborough DIF Area Discussion Draft #2 — Route 9 Corridor showing proposed district boundaries along Boston Road/Route 9, bordered by Framingham, Westborough, and Ashland"
-              className="w-full h-auto"
-            />
-          </div>
-          <p className="text-xs text-slate-500 mt-2">Discussion Draft #2 (2/15/26) — DIF area is within the 25% statutory limit (MGL Ch. 40Q §2). Southborough total area: 15.7 sq mi; 25% limit: 3.9 sq mi.</p>
-        </>
-      )}
+    <div className="bg-slate-50 border-2 border-slate-300 rounded p-4">
+      <p className="text-sm text-slate-600 font-semibold mb-2">DIF District Boundary — Route 9 Corridor</p>
+      <div ref={mapContainerRef} style={{ height: '400px', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
+      <p className="text-xs text-slate-500 mt-2">
+        Live boundary from the Boundary Editor. Use the editor to adjust the district boundary.
+      </p>
     </div>
   );
 };
 
-const AboutDistrictSection = ({ data, setData, stats }) => {
+const AboutDistrictSection = ({ data, setData, stats, boundaryVertices, selectedParcels }) => {
   const [edit, setEdit] = useState(false);
+  // Build parcels with centroids for the map
+  const parcelsWithCoords = useMemo(() => {
+    if (!selectedParcels) return [];
+    return selectedParcels.map(sp => {
+      const match = PARCEL_CENTROIDS.find(pc => pc.id === sp.id);
+      return match ? { ...sp, centroid_lat: match.centroid_lat, centroid_lon: match.centroid_lon } : sp;
+    }).filter(p => p.centroid_lat && p.centroid_lon);
+  }, [selectedParcels]);
+
   return (
     <div className="bg-white p-8 rounded-lg shadow-sm border border-slate-200 space-y-6">
       <div className="flex justify-between items-center">
@@ -401,7 +442,7 @@ const AboutDistrictSection = ({ data, setData, stats }) => {
         </div>
       )}
 
-      <DistrictMapWithFallback />
+      <DistrictBoundaryMap boundaryVertices={boundaryVertices} parcels={parcelsWithCoords} />
 
       {edit ? (
         <textarea
@@ -1637,7 +1678,7 @@ The Southborough DIF follows the proven Massachusetts Chapter 40Q model successf
       <div className="flex-1 overflow-y-auto">
         <div className="p-8 max-w-6xl mx-auto space-y-8">
           {activeSection === 'cover' && <CoverSection data={data} setData={setData} />}
-          {activeSection === 'district' && <AboutDistrictSection data={data} setData={setData} stats={stats} />}
+          {activeSection === 'district' && <AboutDistrictSection data={data} setData={setData} stats={stats} boundaryVertices={boundaryVertices} selectedParcels={selectedParcels} />}
           {activeSection === 'boundary' && (
             <BoundaryEditorSection
               allParcels={PARCEL_CENTROIDS}
