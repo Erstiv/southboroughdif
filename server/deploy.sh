@@ -40,5 +40,11 @@ git pull origin main --quiet
 npm install --quiet
 npm run build
 
+# Restart the Express server
+if systemctl is-active --quiet southboroughdif; then
+    systemctl restart southboroughdif
+    echo "[$(date)] Express server restarted"
+fi
+
 echo "[$(date)] Deploy complete"
 rm -f "$LOCK_FILE"

@@ -1,0 +1,21 @@
+[Unit]
+Description=Southborough DIF Proposal App
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/www/southboroughdif
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+Environment=NODE_ENV=production
+Environment=PORT=3000
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=southboroughdif
+
+[Install]
+WantedBy=multi-user.target
